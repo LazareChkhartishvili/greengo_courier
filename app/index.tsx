@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
@@ -8,7 +9,6 @@ export default function Index() {
 
   useEffect(() => {
     checkOnboardingStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkOnboardingStatus = async () => {
