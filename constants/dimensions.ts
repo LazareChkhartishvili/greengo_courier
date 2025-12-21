@@ -6,7 +6,7 @@ export const Dimensions = {
     padding: 6,
   },
   panel: {
-    maxHeight: 0.45, // 45% of screen height
+    maxHeight: 0.65, // 65% of screen height (increased for better visibility)
     minHeight: 200,
   },
   drawer: {

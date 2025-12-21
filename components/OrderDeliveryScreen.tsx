@@ -1,56 +1,96 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "../constants/colors";
 import { Dimensions as Dims } from "../constants/dimensions";
 
+interface Order {
+  _id: string;
+  userId: {
+    name?: string;
+    phoneNumber: string;
+  };
+  restaurantId?: {
+    name?: string;
+  };
+  items?: {
+    name: string;
+    quantity: number;
+    price: number;
+  }[];
+  totalAmount?: number;
+  deliveryFee?: number;
+  tip?: number;
+  paymentMethod?: string;
+  deliveryAddress: {
+    street: string;
+    city: string;
+    instructions?: string;
+  };
+}
+
 interface OrderDeliveryScreenProps {
+  order: Order | null;
   onDeliver: () => void;
+  isLoading?: boolean;
 }
 
 export const OrderDeliveryScreen: React.FC<OrderDeliveryScreenProps> = ({
+  order,
   onDeliver,
+  isLoading = false,
 }) => {
+  if (!order) {
+    return (
+      <View>
+        <Text style={styles.errorText}>შეკვეთის მონაცემები არ მოიძებნა</Text>
+      </View>
+    );
+  }
+
+  const deliveryAddress = `${order.deliveryAddress?.street || ""}, ${order.deliveryAddress?.city || ""}`;
+  const instructions = order.deliveryAddress?.instructions;
+
   return (
-    <>
+    <View style={styles.container}>
       <Text style={styles.title}>შეკვეთა მიგაქვს</Text>
-      <View style={styles.customerInfoContainer}>
-        <Text style={styles.customerName}>Davit Avaliani</Text>
-        <Text style={styles.customerAddress}>გალაქტიონ ტაბიძის 5</Text>
-      </View>
+      
+      {/* Delivery Address */}
       <View style={styles.deliveryAddressContainer}>
-        <Text style={styles.addressLabel}>მისამართის დეტალები</Text>
-        <Text style={styles.addressText}>შანიძის 43</Text>
+        <Text style={styles.addressLabel}>მიტანის მისამართი</Text>
+        <Text style={styles.addressText}>{deliveryAddress}</Text>
       </View>
-      <View style={styles.notesContainer}>
-        <Text style={styles.notesLabel}>შენიშვნა</Text>
-        <Text style={styles.notesText}>კორპუსში არ მუშაობს ლიფტი</Text>
-      </View>
-      <TouchableOpacity style={styles.deliverButton} onPress={onDeliver}>
-        <Text style={styles.deliverButtonText}>შეკვეთა მიტანილია!</Text>
+
+      {/* Instructions */}
+      {instructions && (
+        <View style={styles.notesContainer}>
+          <Text style={styles.notesLabel}>შენიშვნა</Text>
+          <Text style={styles.notesText}>{instructions}</Text>
+        </View>
+      )}
+      
+      {/* Deliver Button */}
+      <TouchableOpacity 
+        style={[styles.deliverButton, isLoading && styles.deliverButtonDisabled]} 
+        onPress={onDeliver}
+        disabled={isLoading}
+      >
+        <Text style={styles.deliverButtonText}>
+          {isLoading ? "მუშავდება..." : "დასრულება"}
+        </Text>
       </TouchableOpacity>
-    </>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   title: {
     fontSize: 20,
     fontWeight: "700",
     color: Colors.black,
     marginBottom: Dims.padding.large,
-  },
-  customerInfoContainer: {
-    marginBottom: Dims.padding.large,
-  },
-  customerName: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: Colors.black,
-    marginBottom: 4,
-  },
-  customerAddress: {
-    fontSize: 16,
-    color: Colors.gray.medium,
   },
   deliveryAddressContainer: {
     marginBottom: Dims.padding.large,
@@ -85,12 +125,21 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: Dims.borderRadius.medium,
     alignItems: "center",
-    marginTop: Dims.padding.small,
+    marginTop: Dims.padding.large,
+  },
+  deliverButtonDisabled: {
+    opacity: 0.6,
   },
   deliverButtonText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: "600",
+  },
+  errorText: {
+    fontSize: 16,
+    color: Colors.gray.medium,
+    textAlign: "center",
+    padding: Dims.padding.large,
   },
 });
 

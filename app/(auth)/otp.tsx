@@ -2,22 +2,29 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useCourierAuth } from "../../hooks/useCourierAuth";
+import { apiService } from "../../utils/api";
 
 export default function OTPScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const phoneNumber = params.phoneNumber as string;
+  const name = params.name as string | undefined;
+  const { saveCourierData } = useCourierAuth();
 
   const [otp, setOtp] = useState(["", "", "", ""]);
+  const [loading, setLoading] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const handleOtpChange = (text: string, index: number) => {
@@ -54,10 +61,49 @@ export default function OTPScreen() {
     }
   };
 
-  const handleVerify = (code: string) => {
-    if (code.length === 4) {
-      // Simulate OTP verification (no backend validation)
-      router.push("/(onboarding)/verification-start");
+  const handleVerify = async (code: string) => {
+    if (code.length !== 4) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('🔐 Verifying OTP code for:', phoneNumber);
+
+      // Register courier with OTP verification
+      const registerResponse = await apiService.registerCourier(phoneNumber, code, name);
+
+      console.log('📦 Register response:', JSON.stringify(registerResponse, null, 2));
+
+      if (registerResponse.success && registerResponse.data) {
+        const courier = registerResponse.data;
+        const id = courier._id || courier.id;
+        console.log('✅ Courier registered, ID:', id);
+        
+        if (id) {
+          await saveCourierData(id, phoneNumber);
+          router.replace('/(app)/home');
+        } else {
+          console.error('❌ Courier ID not found in response');
+          Alert.alert('შეცდომა', 'კურიერი რეგისტრირდა, მაგრამ ID ვერ მოიძებნა');
+        }
+      } else {
+        const errorMessage = registerResponse.error?.details || 'OTP კოდი არასწორია';
+        console.error('❌ Register courier failed:', errorMessage);
+        Alert.alert('შეცდომა', errorMessage);
+        // Clear OTP on error
+        setOtp(["", "", "", ""]);
+        inputRefs.current[0]?.focus();
+      }
+    } catch (error: any) {
+      console.error('❌ Error verifying OTP:', error);
+      const errorMessage = error.message || 'უცნობი შეცდომა';
+      Alert.alert('შეცდომა', errorMessage);
+      // Clear OTP on error
+      setOtp(["", "", "", ""]);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,16 +132,28 @@ export default function OTPScreen() {
                 ref={(ref) => {
                   inputRefs.current[index] = ref;
                 }}
-                style={[styles.otpInput, digit !== "" && styles.otpInputFilled]}
+                style={[
+                  styles.otpInput,
+                  digit !== "" && styles.otpInputFilled,
+                  loading && styles.otpInputDisabled,
+                ]}
                 value={digit}
                 onChangeText={(text) => handleOtpChange(text, index)}
                 onKeyPress={(e) => handleKeyPress(e, index)}
                 keyboardType="number-pad"
                 maxLength={1}
                 selectTextOnFocus
+                editable={!loading}
               />
             ))}
           </View>
+
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#4CAF50" />
+              <Text style={styles.loadingText}>ვერიფიკაცია...</Text>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -154,5 +212,19 @@ const styles = StyleSheet.create({
   },
   otpInputFilled: {
     borderColor: "#4CAF50",
+  },
+  otpInputDisabled: {
+    opacity: 0.5,
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#666",
   },
 });

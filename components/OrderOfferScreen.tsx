@@ -1,33 +1,73 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "../constants/colors";
 import { Dimensions as Dims } from "../constants/dimensions";
 
+interface Order {
+  _id: string;
+  restaurantId: {
+    name: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+    };
+  };
+  deliveryAddress: {
+    coordinates: { lat: number; lng: number };
+  };
+  deliveryFee: number;
+}
+
 interface OrderOfferScreenProps {
+  order: Order | null;
+  distance?: number;
   onConfirm: () => void;
+  isLoading?: boolean;
 }
 
 export const OrderOfferScreen: React.FC<OrderOfferScreenProps> = ({
+  order,
+  distance,
   onConfirm,
+  isLoading = false,
 }) => {
+  if (!order) {
+    return (
+      <View>
+        <Text style={styles.errorText}>შეკვეთის მონაცემები არ მოიძებნა</Text>
+      </View>
+    );
+  }
+
+  const earnings = order.deliveryFee || 0;
+  const distanceText = distance ? `${distance.toFixed(1)} კმ` : "—";
+
   return (
     <>
       <View style={styles.earningsContainer}>
-        <Text style={styles.earningsText}>+ 12,25 ₾</Text>
+        <Text style={styles.earningsText}>+ {earnings.toFixed(2)} ₾</Text>
         <Text style={styles.earningsSubtext}>
           დაამატეთ თქვენს მიმდინარე ანგარიშს
         </Text>
       </View>
       <View style={styles.orderInfoContainer}>
         <Text style={styles.orderLabel}>შეკვეთა</Text>
-        <Text style={styles.restaurantName}>რესტორანი მაგნოლია</Text>
+        <Text style={styles.restaurantName}>
+          {order.restaurantId?.name || "რესტორანი"}
+        </Text>
         <View style={styles.distanceContainer}>
           <Text style={styles.distanceLabel}>მარშრუტის მანძილი</Text>
-          <Text style={styles.distanceValue}>13.5 კმ</Text>
+          <Text style={styles.distanceValue}>{distanceText}</Text>
         </View>
       </View>
-      <TouchableOpacity style={styles.confirmButton} onPress={onConfirm}>
-        <Text style={styles.confirmButtonText}>შეკვეთის დადასტურება</Text>
+      <TouchableOpacity 
+        style={[styles.confirmButton, isLoading && styles.confirmButtonDisabled]} 
+        onPress={onConfirm}
+        disabled={isLoading}
+      >
+        <Text style={styles.confirmButtonText}>
+          {isLoading ? "მუშავდება..." : "შეკვეთის დადასტურება"}
+        </Text>
       </TouchableOpacity>
     </>
   );
@@ -81,10 +121,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: Dims.padding.small,
   },
+  confirmButtonDisabled: {
+    opacity: 0.6,
+  },
   confirmButtonText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: "600",
+  },
+  errorText: {
+    fontSize: 16,
+    color: Colors.gray.medium,
+    textAlign: "center",
+    padding: Dims.padding.large,
   },
 });
 

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
 import React from "react";
 import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "../constants/colors";
@@ -18,6 +19,12 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   isOpen,
   onClose,
 }) => {
+  const router = useRouter();
+
+  const handleStatisticsPress = () => {
+    onClose();
+    router.push("/(app)/statistics");
+  };
   return (
     <>
       {/* Overlay */}
@@ -93,7 +100,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             </TouchableOpacity>
 
             {/* Statistics */}
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={handleStatisticsPress}>
               <View style={styles.menuItemLeft}>
                 <Ionicons name="stats-chart" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>სტატისტიკა</Text>

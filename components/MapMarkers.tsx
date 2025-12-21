@@ -1,16 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { View, StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Marker } from "react-native-maps";
-import { Location } from "../types";
 import { Colors } from "../constants/colors";
 import { Dimensions as Dims } from "../constants/dimensions";
+import { Location } from "../types";
 
 interface MapMarkersProps {
   driverLocation: Location;
   restaurantLocation: Location;
   customerLocation: Location;
   showRoute: boolean;
+  orderState?: "none" | "offer" | "pickup" | "delivery";
 }
 
 export const MapMarkers: React.FC<MapMarkersProps> = ({
@@ -18,7 +19,11 @@ export const MapMarkers: React.FC<MapMarkersProps> = ({
   restaurantLocation,
   customerLocation,
   showRoute,
+  orderState = "none",
 }) => {
+  const showRestaurant = showRoute && (orderState === "pickup" || orderState === "delivery");
+  const showCustomer = showRoute && orderState === "delivery";
+
   return (
     <>
       {/* Driver marker */}
@@ -28,8 +33,8 @@ export const MapMarkers: React.FC<MapMarkersProps> = ({
         </View>
       </Marker>
 
-      {/* Restaurant marker */}
-      {showRoute && (
+      {/* Restaurant marker - show during pickup and delivery */}
+      {showRestaurant && (
         <Marker coordinate={restaurantLocation} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.restaurantMarker}>
             <Ionicons name="business" size={24} color={Colors.white} />
@@ -37,8 +42,8 @@ export const MapMarkers: React.FC<MapMarkersProps> = ({
         </Marker>
       )}
 
-      {/* Customer marker */}
-      {showRoute && (
+      {/* Customer marker - show only during delivery */}
+      {showCustomer && (
         <Marker coordinate={customerLocation} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.customerMarker}>
             <Ionicons name="person" size={24} color={Colors.white} />

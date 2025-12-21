@@ -1,7 +1,8 @@
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   PanResponder,
   Platform,
@@ -10,10 +11,12 @@ import {
   Text,
   TouchableOpacity,
   useWindowDimensions,
-  View,
+  View
 } from "react-native";
 import MapView, { Polyline, PROVIDER_GOOGLE } from "react-native-maps";
 
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Header } from "../../components/Header";
 import { MapMarkers } from "../../components/MapMarkers";
 import { NavigationDrawer } from "../../components/NavigationDrawer";
@@ -23,27 +26,194 @@ import { OrderPickupScreen } from "../../components/OrderPickupScreen";
 import { SlideButton } from "../../components/SlideButton";
 import { Colors } from "../../constants/colors";
 import { Dimensions as Dims } from "../../constants/dimensions";
+import { useCourierAuth } from "../../hooks/useCourierAuth";
+import { useCourierLocation } from "../../hooks/useCourierLocation";
+import { useCourierOrders } from "../../hooks/useCourierOrders";
 import { useDrawer } from "../../hooks/useDrawer";
 import { useLocation } from "../../hooks/useLocation";
-import { useOrderSimulation } from "../../hooks/useOrderSimulation";
-import { DemandLevel, Status } from "../../types";
+import { DemandLevel, Location, Status } from "../../types";
+import { apiService } from "../../utils/api";
 import { getDemandConfig } from "../../utils/demand";
+import { generateSmoothRoute, getDistance } from "../../utils/location";
+
+type OrderState = "none" | "offer" | "pickup" | "delivery";
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
+  const router = useRouter();
   const [status, setStatus] = useState<Status>("offline");
   const [demandLevel, setDemandLevel] = useState<DemandLevel>("low");
   const [panelTranslateY] = useState(new Animated.Value(0));
+  const [orderState, setOrderState] = useState<OrderState>("none");
+  const [preparationTime, setPreparationTime] = useState(0);
+  const [isOrderReady, setIsOrderReady] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   // Custom hooks
-  const { driverLocation, mapRegion } = useLocation();
+  const { driverLocation, mapRegion, location, isLoading: locationLoading } = useLocation();
   const drawer = useDrawer();
-  const orderSimulation = useOrderSimulation(driverLocation);
+  const { courierId, isLoading: authLoading } = useCourierAuth();
+  
+  const isOnline = status === "online";
+  const hasLocation = location !== null; // Check if location permission is granted
+  
+  // Update courier location when online and location is available
+  useCourierLocation({
+    courierId,
+    driverLocation,
+    isOnline: isOnline && hasLocation, // Only update location if permission granted
+  });
+
+  // Fetch orders from backend (only if location is available)
+  const {
+    availableOrders,
+    currentOrder,
+    loading: ordersLoading,
+    acceptOrder: acceptOrderApi,
+    updateOrderStatus,
+    completeOrder: completeOrderApi,
+  } = useCourierOrders({
+    courierId,
+    driverLocation,
+    isOnline: isOnline && hasLocation, // Only fetch orders if location is available
+  });
+
+  // Determine current order state based on order status
+  // IMPORTANT: Only update orderState when order is first assigned or status changes
+  // Don't automatically change to delivery - courier must click "pickup" button first
+  useEffect(() => {
+    if (!currentOrder) {
+      setOrderState((prev) => {
+        if (prev !== "none") return "none";
+        return prev;
+      });
+      setIsOrderReady(false);
+      setPreparationTime(0);
+      return;
+    }
+
+    const status = currentOrder.status;
+    
+    // If status is 'ready' or 'confirmed', we're in pickup phase
+    // Don't automatically change orderState if it's already 'pickup' - let courier control it
+    if (status === "ready" || status === "confirmed") {
+      // Only set to pickup if we're not already in pickup or delivery state
+      // This prevents automatic state changes when admin changes status
+      setOrderState((prev) => {
+        if (prev === "none" || prev === "offer") {
+          return "pickup";
+        }
+        return prev; // Keep current state if already in pickup or delivery
+      });
+      
+      // If status is 'ready', order is ready immediately (admin marked it as ready)
+      if (status === "ready") {
+        setIsOrderReady(true);
+        setPreparationTime(0);
+      } else {
+        // If status is 'confirmed', check preparation time
+        const orderDate = new Date(currentOrder.orderDate);
+        const now = new Date();
+        const minutesSinceOrder = Math.floor((now.getTime() - orderDate.getTime()) / 60000);
+        // Assume order is ready after 5 minutes
+        if (minutesSinceOrder >= 5) {
+          setIsOrderReady(true);
+          setPreparationTime(0);
+        } else {
+          setIsOrderReady(false);
+          setPreparationTime(5 - minutesSinceOrder);
+        }
+      }
+    } else if (status === "delivering") {
+      // Only set to delivery if we're already in pickup state
+      // This ensures courier clicked "pickup" button first
+      setOrderState((prev) => {
+        if (prev === "pickup") {
+          return "delivery";
+        }
+        return prev; // Keep current state if not in pickup
+      });
+      setIsOrderReady(false);
+      setPreparationTime(0);
+    } else {
+      setOrderState((prev) => {
+        if (prev !== "none") return "none";
+        return prev;
+      });
+    }
+  }, [currentOrder]);
+
+  // Show first available order as offer when online and no current order
+  useEffect(() => {
+    if (isOnline && !currentOrder && availableOrders.length > 0 && orderState === "none") {
+      setOrderState("offer");
+    }
+  }, [isOnline, currentOrder, availableOrders, orderState]);
+
+  // Calculate locations for map
+  const restaurantLocation = useMemo<Location>(() => {
+    if (currentOrder?.restaurantId?.location) {
+      return {
+        latitude: currentOrder.restaurantId.location.latitude,
+        longitude: currentOrder.restaurantId.location.longitude,
+      };
+    }
+    // Default location
+    return { latitude: 41.7201, longitude: 44.7831 };
+  }, [currentOrder]);
+
+  const customerLocation = useMemo<Location>(() => {
+    if (currentOrder?.deliveryAddress?.coordinates) {
+      return {
+        latitude: currentOrder.deliveryAddress.coordinates.lat,
+        longitude: currentOrder.deliveryAddress.coordinates.lng,
+      };
+    }
+    // Default location
+    return { latitude: 41.7101, longitude: 44.7931 };
+  }, [currentOrder]);
+
+  // Calculate route coordinates based on order state
+  const routeCoordinates = useMemo(() => {
+    if (orderState === "none" || orderState === "offer") return [];
+    
+    // During pickup: show route from driver to restaurant
+    if (orderState === "pickup") {
+      return generateSmoothRoute([driverLocation, restaurantLocation]);
+    }
+    
+    // During delivery: show route from driver (current location) to customer
+    if (orderState === "delivery") {
+      return generateSmoothRoute([driverLocation, customerLocation]);
+    }
+    
+    return [];
+  }, [orderState, driverLocation, restaurantLocation, customerLocation]);
+
+  // Calculate distance for offer screen
+  const offerDistance = useMemo(() => {
+    if (orderState !== "offer" || !availableOrders[0]) return undefined;
+    const order = availableOrders[0];
+    if (order.restaurantId?.location && order.deliveryAddress?.coordinates) {
+      return getDistance(
+        order.restaurantId.location.latitude,
+        order.restaurantId.location.longitude,
+        order.deliveryAddress.coordinates.lat,
+        order.deliveryAddress.coordinates.lng
+      );
+    }
+    return undefined;
+  }, [orderState, availableOrders]);
 
   // Panel dimensions
   const panelMaxHeight = height * Dims.panel.maxHeight;
   const panelMinHeight = Dims.panel.minHeight;
+  
+  // Calculate center location button position (above bottom panel)
+  const centerButtonBottom = useMemo(() => {
+    return panelMaxHeight + Dims.padding.large;
+  }, [panelMaxHeight]);
 
   // Slide button dimensions
   const slideWidth = width - Dims.padding.screen * 2;
@@ -52,16 +222,35 @@ export default function HomeScreen() {
 
   // Demand interval effect
   useEffect(() => {
+    if (orderState !== "none") return;
+    
     const demandInterval = setInterval(() => {
-      if (orderSimulation.orderState === "none") {
-        const levels: DemandLevel[] = ["low", "medium", "high"];
-        const randomLevel = levels[Math.floor(Math.random() * levels.length)];
-        setDemandLevel(randomLevel);
-      }
+      const levels: DemandLevel[] = ["low", "medium", "high"];
+      const randomLevel = levels[Math.floor(Math.random() * levels.length)];
+      setDemandLevel(randomLevel);
     }, 30000);
 
     return () => clearInterval(demandInterval);
-  }, [orderSimulation.orderState]);
+  }, [orderState]);
+
+  // Preparation timer
+  useEffect(() => {
+    if (orderState === "pickup" && !isOrderReady && preparationTime > 0) {
+      const timer = setInterval(() => {
+        setPreparationTime((prev) => {
+          if (prev <= 1) {
+            setIsOrderReady(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 60000); // Update every minute
+
+      return () => {
+        if (timer) clearInterval(timer);
+      };
+    }
+  }, [orderState, isOrderReady, preparationTime]);
 
   // Panel pan responder
   const panelPanResponder = useRef(
@@ -110,27 +299,30 @@ export default function HomeScreen() {
     })
   ).current;
 
-  const handleToggleStatus = () => {
-    setStatus(status === "offline" ? "online" : "offline");
-  };
+  // Update courier status when toggling
+  const handleToggleStatus = async () => {
+    const newStatus = status === "offline" ? "online" : "offline";
+    setStatus(newStatus);
 
-  const handleStartSimulation = () => {
-    orderSimulation.startSimulation();
-    setStatus("online");
+    if (courierId) {
+      try {
+        await apiService.updateCourierStatus(
+          courierId,
+          newStatus === "online" ? "available" : "offline",
+          newStatus === "online"
+        );
+      } catch (error) {
+        console.error("Error updating courier status:", error);
+      }
+    }
   };
 
   // Fit map to show route when route coordinates change
   useEffect(() => {
-    if (
-      orderSimulation.orderState !== "none" &&
-      orderSimulation.routeCoordinates.length > 0 &&
-      mapRef.current
-    ) {
-      // Small delay to ensure state is fully updated
+    if (orderState !== "none" && routeCoordinates.length > 0 && mapRef.current) {
       const timer = setTimeout(() => {
-        if (mapRef.current && orderSimulation.routeCoordinates.length > 0) {
-          const coords = orderSimulation.routeCoordinates;
-          mapRef.current.fitToCoordinates(coords, {
+        if (mapRef.current && routeCoordinates.length > 0) {
+          mapRef.current.fitToCoordinates(routeCoordinates, {
             edgePadding: {
               top: 100,
               right: 50,
@@ -144,42 +336,216 @@ export default function HomeScreen() {
 
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    orderSimulation.orderState,
-    orderSimulation.routeCoordinates.length,
-    orderSimulation.restaurantLocation.latitude,
-    orderSimulation.restaurantLocation.longitude,
-    orderSimulation.customerLocation.latitude,
-    orderSimulation.customerLocation.longitude,
-  ]);
+  }, [orderState, routeCoordinates]);
 
-  const handleConfirmOrder = () => {
-    orderSimulation.confirmOrder();
+  const handleConfirmOrder = async () => {
+    if (!courierId || !availableOrders[0] || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const order = availableOrders[0];
+      const success = await acceptOrderApi(order._id);
+      
+      if (success) {
+        setOrderState("pickup");
+        // Start preparation timer
+        setIsOrderReady(false);
+        setPreparationTime(5);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handlePickupOrder = () => {
-    orderSimulation.pickupOrder();
+  const handlePickupOrder = async () => {
+    if (!currentOrder || !isOrderReady || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const success = await updateOrderStatus(currentOrder._id, "delivering");
+      if (success) {
+        setOrderState("delivery");
+        setIsOrderReady(false);
+        setPreparationTime(0);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleDeliverOrder = () => {
-    orderSimulation.deliverOrder();
-    setStatus("online");
+  const handleDeliverOrder = async () => {
+    if (!currentOrder || !courierId || isProcessing) return;
+
+    setIsProcessing(true);
+    try {
+      const success = await completeOrderApi(currentOrder._id);
+      if (success) {
+        setOrderState("none");
+        setStatus("online");
+        setIsOrderReady(false);
+        setPreparationTime(0);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleRejectOrder = () => {
-    orderSimulation.rejectOrder();
+    setOrderState("none");
+  };
+
+  const handleCenterOnLocation = () => {
+    if (mapRef.current && driverLocation) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: driverLocation.latitude,
+          longitude: driverLocation.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        500
+      );
+    }
+  };
+
+  const handleZoomIn = () => {
+    if (mapRef.current) {
+      mapRef.current.getCamera().then((camera) => {
+        if (mapRef.current && camera.center) {
+          const currentZoom = camera.zoom || 15;
+          const newZoom = Math.min(currentZoom + 1, 20);
+          const delta = 0.01 / Math.pow(2, newZoom - 15);
+          
+          mapRef.current.animateToRegion(
+            {
+              latitude: camera.center.latitude,
+              longitude: camera.center.longitude,
+              latitudeDelta: delta,
+              longitudeDelta: delta,
+            },
+            300
+          );
+        }
+      }).catch(() => {
+        // Fallback: use current map region
+        if (mapRef.current) {
+          const currentDelta = mapRegion.latitudeDelta || 0.01;
+          const newDelta = currentDelta * 0.7; // Zoom in by reducing delta
+          
+          mapRef.current.animateToRegion(
+            {
+              latitude: mapRegion.latitude,
+              longitude: mapRegion.longitude,
+              latitudeDelta: Math.max(newDelta, 0.001),
+              longitudeDelta: Math.max(newDelta, 0.001),
+            },
+            300
+          );
+        }
+      });
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (mapRef.current) {
+      mapRef.current.getCamera().then((camera) => {
+        if (mapRef.current && camera.center) {
+          const currentZoom = camera.zoom || 15;
+          const newZoom = Math.max(currentZoom - 1, 3);
+          const delta = 0.01 * Math.pow(2, 15 - newZoom);
+          
+          mapRef.current.animateToRegion(
+            {
+              latitude: camera.center.latitude,
+              longitude: camera.center.longitude,
+              latitudeDelta: Math.min(delta, 180),
+              longitudeDelta: Math.min(delta, 360),
+            },
+            300
+          );
+        }
+      }).catch(() => {
+        // Fallback: use current map region
+        if (mapRef.current) {
+          const currentDelta = mapRegion.latitudeDelta || 0.01;
+          const newDelta = currentDelta * 1.4; // Zoom out by increasing delta
+          
+          mapRef.current.animateToRegion(
+            {
+              latitude: mapRegion.latitude,
+              longitude: mapRegion.longitude,
+              latitudeDelta: Math.min(newDelta, 180),
+              longitudeDelta: Math.min(newDelta, 360),
+            },
+            300
+          );
+        }
+      });
+    }
   };
 
   const getStatusMessage = () => {
-    if (orderSimulation.orderState !== "none") return "";
+    if (orderState !== "none") return "";
     if (status === "offline") {
       return "გადადი ონლაინ რეჟიმში რადგან მიიღო შეკვეთები.";
+    }
+    if (availableOrders.length === 0) {
+      return "თქვენ ხართ ონლაინ რეჟიმში. ახლა შეკვეთები არ არის.";
     }
     return "თქვენ ხართ ონლაინ რეჟიმში დაელოდეთ შეკვეთებს.";
   };
 
   const demandConfig = getDemandConfig(demandLevel);
+
+  // Redirect to auth if no courier ID
+  useEffect(() => {
+    if (!authLoading && !courierId) {
+      router.replace("/(auth)/phone");
+    }
+  }, [authLoading, courierId, router]);
+
+  // Show loading if auth is loading
+  if (authLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>იტვირთება...</Text>
+      </View>
+    );
+  }
+
+  // Show loading while redirecting
+  if (!courierId) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>გადამისამართება...</Text>
+      </View>
+    );
+  }
+
+  // Show location permission request if location is not available
+  if (locationLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>ლოკაციის მიღება...</Text>
+      </View>
+    );
+  }
+
+  if (!hasLocation) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <Text style={styles.errorText}>
+          გთხოვთ, მიუთითოთ ლოკაციის წვდომა
+        </Text>
+        <Text style={styles.errorSubtext}>
+          აპლიკაციის მუშაობისთვის საჭიროა თქვენი ლოკაცია
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -204,15 +570,16 @@ export default function HomeScreen() {
         >
           <MapMarkers
             driverLocation={driverLocation}
-            restaurantLocation={orderSimulation.restaurantLocation}
-            customerLocation={orderSimulation.customerLocation}
-            showRoute={orderSimulation.orderState !== "none"}
+            restaurantLocation={restaurantLocation}
+            customerLocation={customerLocation}
+            showRoute={orderState !== "none"}
+            orderState={orderState}
           />
 
           {/* Route polyline */}
-          {orderSimulation.routeCoordinates.length > 1 && (
+          {routeCoordinates.length > 1 && (
             <Polyline
-              coordinates={orderSimulation.routeCoordinates}
+              coordinates={routeCoordinates}
               strokeColor={Colors.secondary}
               strokeWidth={5}
               lineCap="round"
@@ -221,20 +588,48 @@ export default function HomeScreen() {
             />
           )}
         </MapView>
+
+        {/* Center on location button */}
+        <TouchableOpacity
+          style={[styles.centerLocationButton, { bottom: centerButtonBottom }]}
+          onPress={handleCenterOnLocation}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="locate" size={24} color={Colors.primary} />
+        </TouchableOpacity>
+
+        {/* Zoom controls */}
+        <View style={[styles.zoomControls, { bottom: centerButtonBottom + 60 }]}>
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={handleZoomIn}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+          <View style={styles.zoomDivider} />
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={handleZoomOut}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="remove" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Header */}
       <Header
         status={status}
-        orderState={orderSimulation.orderState}
+        orderState={orderState}
         onMenuPress={drawer.toggle}
         onRejectOrder={handleRejectOrder}
       />
 
       {/* Delivery time badge */}
-      {orderSimulation.orderState === "delivery" && (
+      {orderState === "delivery" && currentOrder && (
         <View style={styles.deliveryTimeBadge}>
-          <Text style={styles.deliveryTimeText}>მიტანა 15 წუთი</Text>
+          <Text style={styles.deliveryTimeText}>მიტანა მიმდინარეობს</Text>
         </View>
       )}
 
@@ -250,7 +645,7 @@ export default function HomeScreen() {
       >
         <BlurView intensity={80} tint="light" style={styles.blurContainer}>
           {/* Demand Indicator */}
-          {orderSimulation.orderState === "none" && (
+          {orderState === "none" && (
             <View
               style={[
                 styles.demandIndicator,
@@ -263,39 +658,46 @@ export default function HomeScreen() {
 
           {/* Content */}
           <View style={styles.panelContent}>
-            {orderSimulation.orderState === "none" && (
+            {orderState === "none" && (
               <>
                 <View style={styles.locationRow}>
-                  <Text style={styles.locationName}>Tskaltubo</Text>
-                  <TouchableOpacity
-                    style={styles.simulationButton}
-                    onPress={handleStartSimulation}
-                  >
-                    <Text style={styles.simulationButtonText}>სიმულაცია</Text>
-                  </TouchableOpacity>
+                  <Text style={styles.locationName}>კურიერი</Text>
+                  {ordersLoading && (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  )}
                 </View>
                 <Text style={styles.statusMessage}>{getStatusMessage()}</Text>
               </>
             )}
 
-            {orderSimulation.orderState === "offer" && (
-              <OrderOfferScreen onConfirm={handleConfirmOrder} />
+            {orderState === "offer" && (
+              <OrderOfferScreen
+                order={availableOrders[0] || null}
+                distance={offerDistance}
+                onConfirm={handleConfirmOrder}
+                isLoading={isProcessing}
+              />
             )}
 
-            {orderSimulation.orderState === "pickup" && (
+            {orderState === "pickup" && (
               <OrderPickupScreen
-                preparationTime={orderSimulation.orderPreparationTime}
-                isReady={orderSimulation.isOrderReady}
+                order={currentOrder}
+                preparationTime={preparationTime}
+                isReady={isOrderReady}
                 onPickup={handlePickupOrder}
               />
             )}
 
-            {orderSimulation.orderState === "delivery" && (
-              <OrderDeliveryScreen onDeliver={handleDeliverOrder} />
+            {orderState === "delivery" && (
+              <OrderDeliveryScreen
+                order={currentOrder}
+                onDeliver={handleDeliverOrder}
+                isLoading={isProcessing}
+              />
             )}
 
             {/* Slide Button */}
-            {orderSimulation.orderState === "none" && status === "offline" && (
+            {orderState === "none" && status === "offline" && (
               <SlideButton
                 status={status}
                 onToggle={handleToggleStatus}
@@ -324,6 +726,29 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  loadingContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.gray.medium,
+  },
+  errorText: {
+    fontSize: 18,
+    color: Colors.black,
+    textAlign: "center",
+    padding: 20,
+    fontWeight: "600",
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: Colors.gray.medium,
+    textAlign: "center",
+    paddingHorizontal: 20,
+    marginTop: 8,
+  },
   map: {
     flex: 1,
     position: "relative",
@@ -349,7 +774,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    maxHeight: "45%",
+    maxHeight: "65%",
     overflow: "hidden",
   },
   blurContainer: {
@@ -400,22 +825,62 @@ const styles = StyleSheet.create({
     marginBottom: Dims.padding.small,
     letterSpacing: -0.5,
   },
-  simulationButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: Dims.padding.small,
-    borderRadius: Dims.borderRadius.large,
-  },
-  simulationButtonText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: "600",
-  },
   statusMessage: {
     fontSize: 15,
     color: Colors.gray.medium,
     marginBottom: Dims.padding.screen,
     lineHeight: 22,
     fontWeight: "400",
+  },
+  centerLocationButton: {
+    position: "absolute",
+    right: Dims.padding.large,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: Colors.black,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: Colors.gray.light,
+    zIndex: 10,
+  },
+  zoomControls: {
+    position: "absolute",
+    right: Dims.padding.large,
+    width: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: Colors.gray.light,
+    zIndex: 10,
+    overflow: "hidden",
+  },
+  zoomButton: {
+    width: 48,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomDivider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: Colors.gray.light,
   },
 });
