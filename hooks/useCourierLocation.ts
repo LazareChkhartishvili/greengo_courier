@@ -53,14 +53,26 @@ export const useCourierLocation = ({
     }
 
     try {
-      await apiService.updateCourierLocation(
+      const response = await apiService.updateCourierLocation(
         courierId,
         driverLocation.latitude,
         driverLocation.longitude
       );
-      lastLocationRef.current = { ...driverLocation };
+      
+      if (response.success) {
+        lastLocationRef.current = { ...driverLocation };
+      } else {
+        // Don't log 500 errors repeatedly - they're likely backend issues
+        if (response.error?.code !== 'HTTP_500') {
+          console.warn('⚠️ Failed to update courier location:', response.error?.details);
+        }
+      }
     } catch (error) {
-      console.error('Error updating courier location:', error);
+      // Only log non-500 errors to avoid spam
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (!errorMessage.includes('500')) {
+        console.error('Error updating courier location:', error);
+      }
     }
   }, [courierId, driverLocation.latitude, driverLocation.longitude]);
 

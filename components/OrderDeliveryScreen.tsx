@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "../constants/colors";
 import { Dimensions as Dims } from "../constants/dimensions";
 
@@ -32,12 +32,14 @@ interface OrderDeliveryScreenProps {
   order: Order | null;
   onDeliver: () => void;
   isLoading?: boolean;
+  deliveryTimeMinutes?: number;
 }
 
 export const OrderDeliveryScreen: React.FC<OrderDeliveryScreenProps> = ({
   order,
   onDeliver,
   isLoading = false,
+  deliveryTimeMinutes = 15,
 }) => {
   if (!order) {
     return (
@@ -47,35 +49,52 @@ export const OrderDeliveryScreen: React.FC<OrderDeliveryScreenProps> = ({
     );
   }
 
-  const deliveryAddress = `${order.deliveryAddress?.street || ""}, ${order.deliveryAddress?.city || ""}`;
+  const customerName = order.userId?.name || "მომხმარებელი";
+  const deliveryAddress = order.deliveryAddress?.street || "";
   const instructions = order.deliveryAddress?.instructions;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>შეკვეთა მიგაქვს</Text>
-      
-      {/* Delivery Address */}
-      <View style={styles.deliveryAddressContainer}>
-        <Text style={styles.addressLabel}>მიტანის მისამართი</Text>
-        <Text style={styles.addressText}>{deliveryAddress}</Text>
-      </View>
-
-      {/* Instructions */}
-      {instructions && (
-        <View style={styles.notesContainer}>
-          <Text style={styles.notesLabel}>შენიშვნა</Text>
-          <Text style={styles.notesText}>{instructions}</Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+      >
+        {/* Title */}
+        <Text style={styles.sectionLabel}>შეკვეთა მიგაქვს</Text>
+        
+        {/* Customer Info */}
+        <View style={styles.customerInfoContainer}>
+          <Text style={styles.customerName}>{customerName}</Text>
+          <Text style={styles.customerAddress}>{deliveryAddress}</Text>
         </View>
-      )}
+
+        <View style={styles.divider} />
+
+        {/* Delivery Address Section */}
+        <View style={styles.deliverySection}>
+          <Text style={styles.sectionTitle}>მისამართის დეტალები</Text>
+          <Text style={styles.deliveryAddress}>{deliveryAddress}</Text>
+          
+          {/* Notes */}
+          {instructions && (
+            <View style={styles.notesContainer}>
+              <Text style={styles.notesLabel}>შენიშვნა</Text>
+              <Text style={styles.notesText}>{instructions}</Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
       
-      {/* Deliver Button */}
+      {/* Deliver Button - Fixed at bottom */}
       <TouchableOpacity 
         style={[styles.deliverButton, isLoading && styles.deliverButtonDisabled]} 
         onPress={onDeliver}
         disabled={isLoading}
       >
         <Text style={styles.deliverButtonText}>
-          {isLoading ? "მუშავდება..." : "დასრულება"}
+          {isLoading ? "მუშავდება..." : "შეკვეთა მიტანილია!"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -86,46 +105,69 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.black,
-    marginBottom: Dims.padding.large,
+  scrollView: {
+    flex: 1,
   },
-  deliveryAddressContainer: {
-    marginBottom: Dims.padding.large,
+  scrollContent: {
+    paddingBottom: Dims.padding.large,
   },
-  addressLabel: {
+  sectionLabel: {
     fontSize: 14,
     color: Colors.gray.medium,
-    marginBottom: 4,
+    marginBottom: Dims.padding.small,
   },
-  addressText: {
+  customerInfoContainer: {
+    marginBottom: Dims.padding.medium,
+  },
+  customerName: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: Colors.primary,
+    marginBottom: Dims.padding.small,
+  },
+  customerAddress: {
     fontSize: 16,
+    color: Colors.gray.medium,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.gray.light,
+    marginVertical: Dims.padding.medium,
+  },
+  deliverySection: {
+    marginBottom: Dims.padding.medium,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
     color: Colors.black,
-    fontWeight: "500",
+    marginBottom: Dims.padding.small,
+  },
+  deliveryAddress: {
+    fontSize: 15,
+    color: Colors.black,
+    marginBottom: Dims.padding.small,
   },
   notesContainer: {
-    marginBottom: Dims.padding.large,
-    padding: Dims.padding.medium,
-    backgroundColor: "#F5F5F5",
-    borderRadius: Dims.borderRadius.small,
+    marginTop: Dims.padding.small,
   },
   notesLabel: {
     fontSize: 14,
-    color: Colors.gray.medium,
+    fontWeight: "600",
+    color: Colors.black,
     marginBottom: 4,
   },
   notesText: {
     fontSize: 14,
-    color: Colors.black,
+    color: Colors.gray.medium,
+    lineHeight: 20,
   },
   deliverButton: {
     backgroundColor: Colors.primary,
     paddingVertical: 16,
     borderRadius: Dims.borderRadius.medium,
     alignItems: "center",
-    marginTop: Dims.padding.large,
+    marginTop: Dims.padding.medium,
   },
   deliverButtonDisabled: {
     opacity: 0.6,
@@ -142,4 +184,3 @@ const styles = StyleSheet.create({
     padding: Dims.padding.large,
   },
 });
-

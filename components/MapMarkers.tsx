@@ -21,32 +21,36 @@ export const MapMarkers: React.FC<MapMarkersProps> = ({
   showRoute,
   orderState = "none",
 }) => {
-  const showRestaurant = showRoute && (orderState === "pickup" || orderState === "delivery");
-  const showCustomer = showRoute && orderState === "delivery";
+  // Show restaurant marker during offer, pickup and delivery
+  const showRestaurant = showRoute || orderState === "offer" || orderState === "pickup" || orderState === "delivery";
+  // Show customer marker during offer and delivery
+  const showCustomer = orderState === "offer" || orderState === "delivery";
 
   return (
     <>
-      {/* Driver marker */}
+      {/* Driver marker - bicycle icon */}
       <Marker coordinate={driverLocation} anchor={{ x: 0.5, y: 0.5 }}>
-        <View style={styles.driverMarker}>
-          <Ionicons name="bicycle" size={Dims.markers.driver} color={Colors.secondary} />
+        <View style={styles.driverMarkerContainer}>
+          <View style={styles.driverMarker}>
+            <Ionicons name="bicycle" size={18} color={Colors.white} />
+          </View>
         </View>
       </Marker>
 
-      {/* Restaurant marker - show during pickup and delivery */}
+      {/* Restaurant marker - storefront icon */}
       {showRestaurant && (
         <Marker coordinate={restaurantLocation} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.restaurantMarker}>
-            <Ionicons name="business" size={24} color={Colors.white} />
+            <Ionicons name="storefront" size={20} color={Colors.white} />
           </View>
         </Marker>
       )}
 
-      {/* Customer marker - show only during delivery */}
+      {/* Customer marker - person icon */}
       {showCustomer && (
         <Marker coordinate={customerLocation} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.customerMarker}>
-            <Ionicons name="person" size={24} color={Colors.white} />
+            <Ionicons name="person" size={20} color={Colors.white} />
           </View>
         </Marker>
       )}
@@ -55,30 +59,53 @@ export const MapMarkers: React.FC<MapMarkersProps> = ({
 };
 
 const styles = StyleSheet.create({
-  driverMarker: {
-    backgroundColor: "transparent",
+  driverMarkerContainer: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  driverMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   restaurantMarker: {
-    width: Dims.markers.restaurant,
-    height: Dims.markers.restaurant,
-    borderRadius: Dims.markers.restaurant / 2,
-    backgroundColor: Colors.restaurant,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.black,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   customerMarker: {
-    width: Dims.markers.customer,
-    height: Dims.markers.customer,
-    borderRadius: Dims.markers.customer / 2,
-    backgroundColor: Colors.customer,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.black,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: Colors.white,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
-

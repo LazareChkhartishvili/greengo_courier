@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
             </View>
           </View>
         </View>
-        {orderState === "pickup" && onRejectOrder && (
+        {orderState === "offer" && onRejectOrder && (
           <TouchableOpacity style={styles.rejectButton} onPress={onRejectOrder}>
             <Text style={styles.rejectButtonText}>უარყოფა</Text>
           </TouchableOpacity>

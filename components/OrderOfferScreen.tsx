@@ -43,23 +43,34 @@ export const OrderOfferScreen: React.FC<OrderOfferScreenProps> = ({
   const distanceText = distance ? `${distance.toFixed(1)} კმ` : "—";
 
   return (
-    <>
+    <View style={styles.container}>
+      {/* Earnings Section */}
       <View style={styles.earningsContainer}>
         <Text style={styles.earningsText}>+ {earnings.toFixed(2)} ₾</Text>
         <Text style={styles.earningsSubtext}>
           დაამატეთ თქვენს მიმდინარე ანგარიშს
         </Text>
       </View>
+
+      <View style={styles.divider} />
+
+      {/* Order Info Section */}
       <View style={styles.orderInfoContainer}>
         <Text style={styles.orderLabel}>შეკვეთა</Text>
         <Text style={styles.restaurantName}>
           {order.restaurantId?.name || "რესტორანი"}
         </Text>
-        <View style={styles.distanceContainer}>
-          <Text style={styles.distanceLabel}>მარშრუტის მანძილი</Text>
-          <Text style={styles.distanceValue}>{distanceText}</Text>
-        </View>
       </View>
+
+      <View style={styles.divider} />
+
+      {/* Distance Section */}
+      <View style={styles.distanceContainer}>
+        <Text style={styles.distanceLabel}>მარშრუტის მანძილი</Text>
+        <Text style={styles.distanceValue}>{distanceText}</Text>
+      </View>
+
+      {/* Confirm Button */}
       <TouchableOpacity 
         style={[styles.confirmButton, isLoading && styles.confirmButtonDisabled]} 
         onPress={onConfirm}
@@ -69,26 +80,34 @@ export const OrderOfferScreen: React.FC<OrderOfferScreenProps> = ({
           {isLoading ? "მუშავდება..." : "შეკვეთის დადასტურება"}
         </Text>
       </TouchableOpacity>
-    </>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   earningsContainer: {
-    marginBottom: Dims.padding.screen,
+    marginBottom: Dims.padding.medium,
   },
   earningsText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "700",
-    color: Colors.primary,
+    color: Colors.black,
     marginBottom: 4,
   },
   earningsSubtext: {
     fontSize: 14,
     color: Colors.gray.medium,
   },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.gray.light,
+    marginVertical: Dims.padding.medium,
+  },
   orderInfoContainer: {
-    marginBottom: Dims.padding.screen,
+    marginBottom: Dims.padding.small,
   },
   orderLabel: {
     fontSize: 14,
@@ -96,13 +115,12 @@ const styles = StyleSheet.create({
     marginBottom: Dims.padding.small,
   },
   restaurantName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
-    color: Colors.black,
-    marginBottom: Dims.padding.medium,
+    color: Colors.primary,
   },
   distanceContainer: {
-    marginTop: Dims.padding.medium,
+    marginBottom: Dims.padding.large,
   },
   distanceLabel: {
     fontSize: 14,
@@ -136,4 +154,3 @@ const styles = StyleSheet.create({
     padding: Dims.padding.large,
   },
 });
-

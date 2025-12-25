@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -34,9 +34,39 @@ import { useLocation } from "../../hooks/useLocation";
 import { DemandLevel, Location, Status } from "../../types";
 import { apiService } from "../../utils/api";
 import { getDemandConfig } from "../../utils/demand";
-import { generateSmoothRoute, getDistance } from "../../utils/location";
+import { generateSmoothRoute, getDistance, generateRandomNearbyLocation } from "../../utils/location";
 
 type OrderState = "none" | "offer" | "pickup" | "delivery";
+
+// Simulation order interface
+interface SimulationOrder {
+  _id: string;
+  restaurantId: {
+    name: string;
+    location: {
+      latitude: number;
+      longitude: number;
+      address: string;
+      city: string;
+    };
+  };
+  userId: {
+    name: string;
+    phoneNumber: string;
+  };
+  deliveryAddress: {
+    street: string;
+    city: string;
+    instructions: string;
+    coordinates: { lat: number; lng: number };
+  };
+  items: { name: string; quantity: number; price: number }[];
+  totalAmount: number;
+  deliveryFee: number;
+  tip: number;
+  paymentMethod: string;
+  status: string;
+}
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
@@ -49,6 +79,13 @@ export default function HomeScreen() {
   const [isOrderReady, setIsOrderReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mapRef = useRef<MapView>(null);
+  
+  // Simulation mode state
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [simulationOrder, setSimulationOrder] = useState<SimulationOrder | null>(null);
+  const [simRestaurantLocation, setSimRestaurantLocation] = useState<Location | null>(null);
+  const [simCustomerLocation, setSimCustomerLocation] = useState<Location | null>(null);
+  const [deliveryTimeMinutes, setDeliveryTimeMinutes] = useState(15);
 
   // Custom hooks
   const { driverLocation, mapRegion, location, isLoading: locationLoading } = useLocation();
@@ -151,8 +188,107 @@ export default function HomeScreen() {
     }
   }, [isOnline, currentOrder, availableOrders, orderState]);
 
+  // Simulation functions
+  const startSimulation = useCallback(() => {
+    if (!driverLocation) return;
+    
+    // Generate random nearby locations
+    const restaurant = generateRandomNearbyLocation(driverLocation, 1.5);
+    const customer = generateRandomNearbyLocation(restaurant, 2);
+    
+    setSimRestaurantLocation(restaurant);
+    setSimCustomerLocation(customer);
+    
+    // Create simulation order
+    const order: SimulationOrder = {
+      _id: `sim_${Date.now()}`,
+      restaurantId: {
+        name: "რესტორანი მაგნოლია",
+        location: {
+          latitude: restaurant.latitude,
+          longitude: restaurant.longitude,
+          address: "გალაქტიონ ტაბიძის 5",
+          city: "თბილისი",
+        },
+      },
+      userId: {
+        name: "Davit Avaliani",
+        phoneNumber: "+995 555 123 456",
+      },
+      deliveryAddress: {
+        street: "შანიძის 4ა",
+        city: "თბილისი",
+        instructions: "კორპუსში არ მუშაობს ლიფტი",
+        coordinates: { lat: customer.latitude, lng: customer.longitude },
+      },
+      items: [
+        { name: "მარგარიტა პიცა", quantity: 1, price: 18.50 },
+        { name: "კოკა-კოლა 0.5ლ", quantity: 2, price: 3.00 },
+      ],
+      totalAmount: 24.50,
+      deliveryFee: 12.25,
+      tip: 2.00,
+      paymentMethod: "card",
+      status: "pending",
+    };
+    
+    setSimulationOrder(order);
+    setIsSimulationMode(true);
+    setStatus("online");
+    setOrderState("offer");
+    setDeliveryTimeMinutes(15);
+  }, [driverLocation]);
+
+  const handleSimConfirmOrder = useCallback(() => {
+    setOrderState("pickup");
+    setIsOrderReady(false);
+    setPreparationTime(3);
+    
+    // Quick timer for simulation (3 seconds instead of minutes)
+    let timeLeft = 3;
+    const timer = setInterval(() => {
+      timeLeft -= 1;
+      setPreparationTime(timeLeft);
+      if (timeLeft <= 0) {
+        setIsOrderReady(true);
+        clearInterval(timer);
+      }
+    }, 1000);
+  }, []);
+
+  const handleSimPickupOrder = useCallback(() => {
+    if (!isOrderReady) return;
+    setOrderState("delivery");
+    setIsOrderReady(false);
+    setPreparationTime(0);
+  }, [isOrderReady]);
+
+  const handleSimDeliverOrder = useCallback(() => {
+    setOrderState("none");
+    setIsSimulationMode(false);
+    setSimulationOrder(null);
+    setSimRestaurantLocation(null);
+    setSimCustomerLocation(null);
+    setIsOrderReady(false);
+    setPreparationTime(0);
+  }, []);
+
+  const handleSimRejectOrder = useCallback(() => {
+    setOrderState("none");
+    setIsSimulationMode(false);
+    setSimulationOrder(null);
+    setSimRestaurantLocation(null);
+    setSimCustomerLocation(null);
+    setIsOrderReady(false);
+    setPreparationTime(0);
+  }, []);
+
   // Calculate locations for map
   const restaurantLocation = useMemo<Location>(() => {
+    // Use simulation location if in simulation mode
+    if (isSimulationMode && simRestaurantLocation) {
+      return simRestaurantLocation;
+    }
     if (currentOrder?.restaurantId?.location) {
       return {
         latitude: currentOrder.restaurantId.location.latitude,
@@ -161,9 +297,13 @@ export default function HomeScreen() {
     }
     // Default location
     return { latitude: 41.7201, longitude: 44.7831 };
-  }, [currentOrder]);
+  }, [currentOrder, isSimulationMode, simRestaurantLocation]);
 
   const customerLocation = useMemo<Location>(() => {
+    // Use simulation location if in simulation mode
+    if (isSimulationMode && simCustomerLocation) {
+      return simCustomerLocation;
+    }
     if (currentOrder?.deliveryAddress?.coordinates) {
       return {
         latitude: currentOrder.deliveryAddress.coordinates.lat,
@@ -172,11 +312,16 @@ export default function HomeScreen() {
     }
     // Default location
     return { latitude: 41.7101, longitude: 44.7931 };
-  }, [currentOrder]);
+  }, [currentOrder, isSimulationMode, simCustomerLocation]);
 
   // Calculate route coordinates based on order state
   const routeCoordinates = useMemo(() => {
-    if (orderState === "none" || orderState === "offer") return [];
+    if (orderState === "none") return [];
+    
+    // For offer state, show full route: driver -> restaurant -> customer
+    if (orderState === "offer") {
+      return generateSmoothRoute([driverLocation, restaurantLocation, customerLocation]);
+    }
     
     // During pickup: show route from driver to restaurant
     if (orderState === "pickup") {
@@ -193,7 +338,26 @@ export default function HomeScreen() {
 
   // Calculate distance for offer screen
   const offerDistance = useMemo(() => {
-    if (orderState !== "offer" || !availableOrders[0]) return undefined;
+    if (orderState !== "offer") return undefined;
+    
+    // Simulation mode distance calculation
+    if (isSimulationMode && simRestaurantLocation && simCustomerLocation) {
+      const driverToRestaurant = getDistance(
+        driverLocation.latitude,
+        driverLocation.longitude,
+        simRestaurantLocation.latitude,
+        simRestaurantLocation.longitude
+      );
+      const restaurantToCustomer = getDistance(
+        simRestaurantLocation.latitude,
+        simRestaurantLocation.longitude,
+        simCustomerLocation.latitude,
+        simCustomerLocation.longitude
+      );
+      return driverToRestaurant + restaurantToCustomer;
+    }
+    
+    if (!availableOrders[0]) return undefined;
     const order = availableOrders[0];
     if (order.restaurantId?.location && order.deliveryAddress?.coordinates) {
       return getDistance(
@@ -204,7 +368,7 @@ export default function HomeScreen() {
       );
     }
     return undefined;
-  }, [orderState, availableOrders]);
+  }, [orderState, availableOrders, isSimulationMode, simRestaurantLocation, simCustomerLocation, driverLocation]);
 
   // Panel dimensions
   const panelMaxHeight = height * Dims.panel.maxHeight;
@@ -391,7 +555,11 @@ export default function HomeScreen() {
   };
 
   const handleRejectOrder = () => {
-    setOrderState("none");
+    if (isSimulationMode) {
+      handleSimRejectOrder();
+    } else {
+      setOrderState("none");
+    }
   };
 
   const handleCenterOnLocation = () => {
@@ -627,10 +795,22 @@ export default function HomeScreen() {
       />
 
       {/* Delivery time badge */}
-      {orderState === "delivery" && currentOrder && (
+      {orderState === "delivery" && (currentOrder || isSimulationMode) && (
         <View style={styles.deliveryTimeBadge}>
-          <Text style={styles.deliveryTimeText}>მიტანა მიმდინარეობს</Text>
+          <Text style={styles.deliveryTimeText}>მიტანა {deliveryTimeMinutes} წუთი</Text>
         </View>
+      )}
+
+      {/* Simulation Test Button */}
+      {orderState === "none" && status === "online" && !isSimulationMode && (
+        <TouchableOpacity
+          style={styles.simulationButton}
+          onPress={startSimulation}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="flask" size={20} color={Colors.white} />
+          <Text style={styles.simulationButtonText}>ტესტი</Text>
+        </TouchableOpacity>
       )}
 
       {/* Bottom Panel */}
@@ -672,27 +852,28 @@ export default function HomeScreen() {
 
             {orderState === "offer" && (
               <OrderOfferScreen
-                order={availableOrders[0] || null}
+                order={isSimulationMode ? simulationOrder : (availableOrders[0] || null)}
                 distance={offerDistance}
-                onConfirm={handleConfirmOrder}
+                onConfirm={isSimulationMode ? handleSimConfirmOrder : handleConfirmOrder}
                 isLoading={isProcessing}
               />
             )}
 
             {orderState === "pickup" && (
               <OrderPickupScreen
-                order={currentOrder}
+                order={isSimulationMode ? simulationOrder : currentOrder}
                 preparationTime={preparationTime}
                 isReady={isOrderReady}
-                onPickup={handlePickupOrder}
+                onPickup={isSimulationMode ? handleSimPickupOrder : handlePickupOrder}
               />
             )}
 
             {orderState === "delivery" && (
               <OrderDeliveryScreen
-                order={currentOrder}
-                onDeliver={handleDeliverOrder}
+                order={isSimulationMode ? simulationOrder : currentOrder}
+                onDeliver={isSimulationMode ? handleSimDeliverOrder : handleDeliverOrder}
                 isLoading={isProcessing}
+                deliveryTimeMinutes={deliveryTimeMinutes}
               />
             )}
 
@@ -882,5 +1063,28 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 1,
     backgroundColor: Colors.gray.light,
+  },
+  simulationButton: {
+    position: "absolute",
+    left: Dims.padding.large,
+    bottom: "45%",
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 10,
+    gap: 6,
+  },
+  simulationButtonText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

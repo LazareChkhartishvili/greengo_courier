@@ -15,6 +15,7 @@ interface Order {
   deliveryAddress: {
     street: string;
     city: string;
+    instructions?: string;
   };
   status: string;
   items?: {
@@ -54,11 +55,8 @@ export const OrderPickupScreen: React.FC<OrderPickupScreenProps> = ({
     `${order.restaurantId?.location?.city || ""}` ||
     "მისამართი არ არის მითითებული";
 
-  const items = order.items || [];
-  const totalAmount = order.totalAmount || 0;
-  const deliveryFee = order.deliveryFee || 0;
-  const tip = order.tip || 0;
-  const paymentMethod = order.paymentMethod === "card" ? "ბარათი" : order.paymentMethod === "cash" ? "ნაღდი" : "უცნობი";
+  const deliveryAddress = `${order.deliveryAddress?.street || ""}`;
+  const instructions = order.deliveryAddress?.instructions;
 
   return (
     <View style={styles.container}>
@@ -68,14 +66,24 @@ export const OrderPickupScreen: React.FC<OrderPickupScreenProps> = ({
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
-        <Text style={styles.title}>შეკვეთის აღება</Text>
+        {/* Title */}
+        <Text style={styles.sectionLabel}>შეკვეთის აღება</Text>
         
-        {/* Preparation Status - Moved to top */}
-        <View
+        {/* Restaurant Info */}
+        <View style={styles.restaurantInfoContainer}>
+          <Text style={styles.restaurantName}>
+            {order.restaurantId?.name || "რესტორანი"}
+          </Text>
+          <Text style={styles.restaurantAddress}>{restaurantAddress}</Text>
+        </View>
+
+        {/* Preparation Status Button */}
+        <TouchableOpacity
           style={[
             styles.preparationButton,
             isReady && styles.preparationButtonReady,
           ]}
+          activeOpacity={0.8}
         >
           <Text
             style={[
@@ -87,51 +95,23 @@ export const OrderPickupScreen: React.FC<OrderPickupScreenProps> = ({
               ? "შეკვეთა მზადაა"
               : `შეკვეთა მზადდება... (${preparationTime}წ)`}
           </Text>
-        </View>
+        </TouchableOpacity>
 
-        <View style={styles.restaurantInfoContainer}>
-          <Text style={styles.restaurantName}>
-            {order.restaurantId?.name || "რესტორანი"}
-          </Text>
-          <Text style={styles.restaurantAddress}>{restaurantAddress}</Text>
-        </View>
+        <View style={styles.divider} />
 
-        {/* Order Items */}
-        {items.length > 0 && (
-          <View style={styles.itemsContainer}>
-            <Text style={styles.itemsLabel}>შეკვეთის დეტალები</Text>
-            {items.map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemQuantity}>x{item.quantity}</Text>
-                </View>
-                <Text style={styles.itemPrice}>{item.price.toFixed(2)} ₾</Text>
-              </View>
-            ))}
-            <View style={styles.itemsDivider} />
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>სულ:</Text>
-              <Text style={styles.totalAmount}>{totalAmount.toFixed(2)} ₾</Text>
+        {/* Delivery Address Section */}
+        <View style={styles.deliverySection}>
+          <Text style={styles.sectionTitle}>მისამართის დეტალები</Text>
+          <Text style={styles.deliveryAddress}>{deliveryAddress}</Text>
+          
+          {/* Notes */}
+          {instructions && (
+            <View style={styles.notesContainer}>
+              <Text style={styles.notesLabel}>შენიშვნა</Text>
+              <Text style={styles.notesText}>{instructions}</Text>
             </View>
-            {deliveryFee > 0 && (
-              <View style={styles.feeRow}>
-                <Text style={styles.feeLabel}>მიტანის საფასური:</Text>
-                <Text style={styles.feeAmount}>{deliveryFee.toFixed(2)} ₾</Text>
-              </View>
-            )}
-            {tip > 0 && (
-              <View style={styles.feeRow}>
-                <Text style={styles.feeLabel}>ჩაი:</Text>
-                <Text style={styles.feeAmount}>{tip.toFixed(2)} ₾</Text>
-              </View>
-            )}
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>გადახდის მეთოდი:</Text>
-              <Text style={styles.paymentMethod}>{paymentMethod}</Text>
-            </View>
-          </View>
-        )}
+          )}
+        </View>
       </ScrollView>
 
       {/* Pickup Button - Fixed at bottom */}
@@ -154,141 +134,77 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: Dims.padding.large + 100, // Extra padding to ensure all content is visible above button
+    paddingBottom: Dims.padding.large,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: Colors.black,
-    marginBottom: Dims.padding.large,
+  sectionLabel: {
+    fontSize: 14,
+    color: Colors.gray.medium,
+    marginBottom: Dims.padding.small,
   },
   restaurantInfoContainer: {
     marginBottom: Dims.padding.medium,
   },
   restaurantName: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: Colors.black,
-    marginBottom: Dims.padding.medium,
+    fontSize: 22,
+    fontWeight: "700",
+    color: Colors.primary,
+    marginBottom: Dims.padding.small,
   },
   restaurantAddress: {
     fontSize: 16,
     color: Colors.gray.medium,
-    marginBottom: Dims.padding.medium,
   },
   preparationButton: {
-    backgroundColor: Colors.warning,
+    backgroundColor: "#E3F2FD",
     paddingVertical: Dims.padding.medium,
     paddingHorizontal: 16,
     borderRadius: Dims.borderRadius.small,
-    marginBottom: Dims.padding.large,
+    marginBottom: Dims.padding.medium,
+    alignSelf: "flex-start",
   },
   preparationButtonReady: {
-    backgroundColor: Colors.primary,
+    backgroundColor: "#E8F5E9",
   },
   preparationButtonText: {
-    color: Colors.white,
+    color: "#1976D2",
     fontSize: 14,
     fontWeight: "600",
-    textAlign: "center",
   },
   preparationButtonTextReady: {
-    color: Colors.white,
-  },
-  itemsContainer: {
-    marginBottom: Dims.padding.large,
-    padding: Dims.padding.medium,
-    backgroundColor: "#F9F9F9",
-    borderRadius: Dims.borderRadius.small,
-  },
-  itemsLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.black,
-    marginBottom: Dims.padding.small,
-  },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Dims.padding.small,
-  },
-  itemInfo: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  itemName: {
-    fontSize: 14,
-    color: Colors.black,
-    fontWeight: "500",
-    marginRight: Dims.padding.small,
-  },
-  itemQuantity: {
-    fontSize: 12,
-    color: Colors.gray.medium,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.black,
-  },
-  itemsDivider: {
-    height: 1,
-    backgroundColor: Colors.gray.light,
-    marginVertical: Dims.padding.small,
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: Dims.padding.small,
-    paddingTop: Dims.padding.small,
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray.light,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: Colors.black,
-  },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: "700",
     color: Colors.primary,
   },
-  feeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
+  divider: {
+    height: 1,
+    backgroundColor: Colors.gray.light,
+    marginVertical: Dims.padding.medium,
   },
-  feeLabel: {
-    fontSize: 12,
-    color: Colors.gray.medium,
+  deliverySection: {
+    marginBottom: Dims.padding.medium,
   },
-  feeAmount: {
-    fontSize: 12,
-    color: Colors.gray.medium,
-    fontWeight: "500",
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.black,
+    marginBottom: Dims.padding.small,
   },
-  paymentRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  deliveryAddress: {
+    fontSize: 15,
+    color: Colors.black,
+    marginBottom: Dims.padding.small,
+  },
+  notesContainer: {
     marginTop: Dims.padding.small,
-    paddingTop: Dims.padding.small,
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray.light,
   },
-  paymentLabel: {
-    fontSize: 12,
-    color: Colors.gray.medium,
-  },
-  paymentMethod: {
-    fontSize: 12,
+  notesLabel: {
+    fontSize: 14,
     fontWeight: "600",
     color: Colors.black,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    color: Colors.gray.medium,
+    lineHeight: 20,
   },
   pickupButton: {
     backgroundColor: Colors.primary,
@@ -312,4 +228,3 @@ const styles = StyleSheet.create({
     padding: Dims.padding.large,
   },
 });
-

@@ -15,7 +15,34 @@ export default function AppLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="statistics"
+        options={{
+          title: "სტატისტიკა",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          title: "შეტყობინებები",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="finances"
+        options={{
+          title: "ფინანსები",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="earn-more"
+        options={{
+          title: "გამოიმუშავე მეტი",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
-

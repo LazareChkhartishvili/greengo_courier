@@ -2,7 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Colors } from "../constants/colors";
 import { Dimensions as Dims } from "../constants/dimensions";
 
@@ -21,10 +28,31 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
 }) => {
   const router = useRouter();
 
+  const handleNotificationsPress = () => {
+    onClose();
+    router.push("/(app)/notifications");
+  };
+
+  const handleFinancesPress = () => {
+    onClose();
+    router.push("/(app)/finances");
+  };
+
   const handleStatisticsPress = () => {
     onClose();
     router.push("/(app)/statistics");
   };
+
+  const handleEarnMorePress = () => {
+    onClose();
+    router.push("/(app)/earn-more");
+  };
+
+  const handleSupportPress = () => {
+    onClose();
+    router.push("/(app)/support");
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -72,13 +100,20 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               <Text style={styles.profileName}>Davit Avaliani</Text>
               <Text style={styles.profileLabel}>ჩემი პროფილი</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.gray.medium} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={Colors.gray.medium}
+            />
           </TouchableOpacity>
 
           {/* Menu Items */}
           <View style={styles.menuItems}>
             {/* Notifications */}
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleNotificationsPress}
+            >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="notifications" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>შეტყობინებები</Text>
@@ -91,39 +126,67 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             </TouchableOpacity>
 
             {/* Finances */}
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleFinancesPress}
+            >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="cash" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>ფინანსები</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray.medium} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={Colors.gray.medium}
+              />
             </TouchableOpacity>
 
             {/* Statistics */}
-            <TouchableOpacity style={styles.menuItem} onPress={handleStatisticsPress}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleStatisticsPress}
+            >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="stats-chart" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>სტატისტიკა</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray.medium} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={Colors.gray.medium}
+              />
             </TouchableOpacity>
 
             {/* Earn More */}
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleEarnMorePress}
+            >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="wallet" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>გამოიმუშავე მეტი</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray.medium} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={Colors.gray.medium}
+              />
             </TouchableOpacity>
 
             {/* Support */}
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleSupportPress}
+            >
               <View style={styles.menuItemLeft}>
                 <Ionicons name="headset" size={24} color={Colors.black} />
                 <Text style={styles.menuItemText}>მხარდაჭერა</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray.medium} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={Colors.gray.medium}
+              />
             </TouchableOpacity>
           </View>
         </BlurView>
@@ -235,4 +298,3 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
-
